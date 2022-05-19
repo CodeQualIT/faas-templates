@@ -49,10 +49,13 @@ ENV PATH=$PATH:/home/app/.local/bin:/home/app/python/bin/
 ENV PYTHONPATH=$PYTHONPATH:/home/app/python
 
 # Copy over watchdog
+USER root
 COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
 RUN chmod +x /usr/bin/fwatchdog
 
 # Copy over template files
+USER app
+WORKDIR /home/app/
 COPY index.py           .
 COPY requirements.txt   .
 
