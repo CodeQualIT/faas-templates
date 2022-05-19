@@ -16,10 +16,13 @@ ENV PYTHONPATH=$PYTHONPATH:/home/app/python
 ARG GITHUB_TOKEN
 
 # Install git and make the git token available as environment variable
+USER root
 RUN apk --no-cache add git
 ENV GITHUB_TOKEN=${GITHUB_TOKEN}
 
 # Install template requirements
+USER app
+WORKDIR /home/app/
 COPY requirements.txt   .
 RUN pip install -r requirements.txt --target=/home/app/python
 
