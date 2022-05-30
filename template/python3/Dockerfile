@@ -1,77 +1,50 @@
-# Builder stage that allows you to use git modules from private repos
-FROM --platform=${TARGETPLATFORM:-linux/amd64} python:3-alpine as builder
-
-# Basic user, python and certificate setup
-ARG ADDITIONAL_PACKAGE
-RUN apk --no-cache add ca-certificates ${ADDITIONAL_PACKAGE}
-RUN addgroup -S app && adduser app -S -G app
-WORKDIR /home/app/
-RUN chown -R app /home/app && \
-    mkdir -p /home/app/python && chown -R app /home/app
-USER app
-ENV PATH=$PATH:/home/app/.local/bin:/home/app/python/bin/
-ENV PYTHONPATH=$PYTHONPATH:/home/app/python
-
-# Token to be provided as argument
-ARG GIT_TOKEN=no_token_set
-
-# Install git and make the git token available as environment variable
-USER root
-RUN apk --no-cache add git
-
-# Install template requirements
-USER app
-WORKDIR /home/app/
-COPY requirements.txt   .
-RUN GIT_TOKEN=${GIT_TOKEN} pip install -r requirements.txt --target=/home/app/python
-
-# Install function specific requirements
-RUN mkdir -p function
-WORKDIR /home/app/function/
-COPY function/requirements.txt	.
-RUN GIT_TOKEN=${GIT_TOKEN} pip install -r requirements.txt --target=/home/app/python
-
 FROM --platform=${TARGETPLATFORM:-linux/amd64} ghcr.io/openfaas/classic-watchdog:0.2.0 as watchdog
-
-# Actual image
 FROM --platform=${TARGETPLATFORM:-linux/amd64} python:3-alpine
 
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
 # Basic user, python and certificate setup
 ARG ADDITIONAL_PACKAGE
-RUN apk --no-cache add ca-certificates ${ADDITIONAL_PACKAGE}
-RUN addgroup -S app && adduser app -S -G app
-WORKDIR /home/app/
-RUN chown -R app /home/app && \
-    mkdir -p /home/app/python && chown -R app /home/app
-USER app
-ENV PATH=$PATH:/home/app/.local/bin:/home/app/python/bin/
-ENV PYTHONPATH=$PYTHONPATH:/home/app/python
 
 # Copy over watchdog
-USER root
 COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
 RUN chmod +x /usr/bin/fwatchdog
 
-# Copy over template files
+# Install additional packages (and git for private git dependencies in requirements.txt)
+RUN apk --no-cache add ca-certificates git ${ADDITIONAL_PACKAGE}
+
+# Add non root user
+RUN addgroup -S app && adduser app -S -G app
+
+RUN chown -R app /home/app && \
+    mkdir -p /home/app/python && chown -R app /home/app
+
+# Setup python env vars
 USER app
+ENV PATH=$PATH:/home/app/.local/bin:/home/app/python/bin/
+ENV PYTHONPATH=$PYTHONPATH:/home/app/python
+
+# Copy over template files and install template requirements
 WORKDIR /home/app/
 COPY index.py           .
 COPY requirements.txt   .
+RUN --mount=type=secret,id=GIT_TOKEN GIT_TOKEN=$(cat /run/secrets/GIT_TOKEN) pip install -r requirements.txt --target=/home/app/python
 
 # Mark the function dir as a module
 RUN mkdir -p function
 RUN touch ./function/__init__.py
 
-# Copy over the function specific requirements file
+# Copy over the function specific requirements file and install these requirements
 WORKDIR /home/app/function/
 COPY function/requirements.txt	.
+RUN --mount=type=secret,id=GIT_TOKEN GIT_TOKEN=$(cat /run/secrets/GIT_TOKEN) pip install -r requirements.txt --target=/home/app/python
 
-# Copy over resolved dependencies from builder stage
-WORKDIR /home/app/
-COPY --from=builder /home/app/.cache /home/app/.cache
-COPY --from=builder /home/app/python /home/app/python
+# Remove git as it is no longer needed
+apk del git
 
 # Copy over the specific function code
+WORKDIR /home/app/
 USER root
 COPY function           function
 
