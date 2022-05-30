@@ -41,7 +41,7 @@ COPY function/requirements.txt	.
 RUN --mount=type=secret,id=GIT_TOKEN GIT_TOKEN=$(cat /run/secrets/GIT_TOKEN) pip install -r requirements.txt --target=/home/app/python
 
 # Remove git as it is no longer needed
-apk del git
+RUN apk del git
 
 # Copy over the specific function code
 WORKDIR /home/app/
