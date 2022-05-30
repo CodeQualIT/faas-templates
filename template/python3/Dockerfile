@@ -4,7 +4,7 @@ FROM --platform=${TARGETPLATFORM:-linux/amd64} python:3-alpine
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
-# Basic user, python and certificate setup
+# Allows you to add additional packages via build-arg
 ARG ADDITIONAL_PACKAGE
 
 # Copy over watchdog
